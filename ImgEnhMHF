@@ -1,0 +1,89 @@
+%Morteza Hajitabar Firuzjaei
+%Senior Computer Programmer
+function [ASAUMF]=ASAUMF()
+clc; clear all; close all; dbstop if error;
+img.h=360; img.w=480; img.L=255;job=0; fig=[];global PSO;
+PSO.G=10;PSO.N=30;PSO.w=0.6;
+PSO.X1=[ 1; 0; 0; 0];
+PSO.X2=[ 5; 5; 1; 5];
+PSO.d=length(PSO.X1);
+PSO.X=rand(PSO.d,PSO.N).*repmat(PSO.X2-PSO.X1,1,PSO.N)+repmat(PSO.X1,1,PSO.N);
+PSO.V=zeros(PSO.d,PSO.N);
+PSO.gbest=-realmax; PSO.Gbest=[];
+PSO.pbest=-ones(PSO.d,PSO.N)*realmax; PSO.Pbest=PSO.X;
+[fn,pn,bn]=uigetfile('Images\\*.*');
+img.JPG=double(imread([pn fn]))/img.L;
+[img,img.RGB]=MyImResize(img,img.JPG);
+fig(end+1)=MyFigure; MyImshow(fig(end),img.RGB,fn,job); job=job+1;
+[ASAUMF]=MyASAUMF(img);
+fig(end+1)=MyFigure(); MyImshow(fig(end),ASAUMF,fn,job); 
+
+function [ENH]=MyASAUMF(img)
+global PSO;
+img.hsv=rgb2gray(img.RGB);
+img.gry=img.hsv;
+temp1=img.RGB;% image var
+img.mhfVar(1)= abs(var(temp1(:)));
+%disp(temp1);
+PSO.g=1; PSO.h=0;
+while (PSO.g-PSO.h)<PSO.G && PSO.h<PSO.G*3,
+  for n=1:PSO.N,
+    [img]=DoUnsharpMasking(img,PSO,n);
+    temp2=img.enh;% image var
+    PSO.fit(PSO.g,n)= abs(var(temp2(:)));
+    %disp(temp1);
+    PSO.fit(PSO.g,n)=PSO.fit(PSO.g,n)*(1-img.ovr/img.N);
+    if PSO.fit(PSO.g,n)>PSO.gbest,
+      PSO.gbest=PSO.fit(PSO.g,n);
+      PSO.Gbest=PSO.X(:,n);
+      temp3=img.enh;% var of enhanced image
+      img.mhfVar(2)= abs(var(temp3(:)));
+      %disp(temp1);
+      ENH=img.enh;
+    end;
+    if PSO.fit(PSO.g,n)>PSO.pbest(n),
+      PSO.pbest(n)=PSO.fit(PSO.g,n);
+      PSO.Pbest(:,n)=PSO.X(:,n);
+    end;
+  end;
+  C1=2*rand(PSO.d,PSO.N).*(repmat(PSO.Gbest,1,PSO.N)-PSO.X);
+  C2=2*rand(PSO.d,PSO.N).*(PSO.Pbest-PSO.X);
+  PSO.V=PSO.w*PSO.V+C1+C2;
+  PSO.X=PSO.X+PSO.V;
+  PSO.X_=rand(PSO.d,PSO.N).*repmat(PSO.X2-PSO.X1,1,PSO.N)+repmat(PSO.X1,1,PSO.N);
+  if (img.mhfVar(2)>img.mhfVar(1)),
+    for d=1:PSO.d,
+      z=find(PSO.X(d,:)<PSO.X1(d) | PSO.X(d,:)>PSO.X2(d));
+      PSO.X(d,z)=PSO.X_(d,z);
+    end;
+  else
+    PSO.X=PSO.X_
+    PSO.h=PSO.h+1;
+    disp([PSO.g PSO.Gbest' PSO.gbest]);
+  end
+  PSO.g=PSO.g+1;
+end;
+  
+function [img]=DoUnsharpMasking(img,PSO,n)
+H=fspecial('average',ceil(PSO.X(1,n))*2+1);
+L=PSO.X(2,n)*exp(-(img.gry-PSO.X(3,n)).^2/(2*PSO.X(4,n)^2));% gain
+filtered=imfilter(img.gry,H,'same','replicate');% filter
+dif=img.gry-filtered;
+img.umk=img.gry+L.*dif;% unsharp masked
+z0=find(img.umk<0); z1=find(img.umk>1);
+img.ovr=length(z0)+length(z1);
+img.umk(z0)=img.gry(z0); img.unk(z1)=img.gry(z1);
+img.enh=img.hsv; img.enh(:,:,3)=img.umk;
+img.enh=hsv2rgb(img.enh);
+
+function [RGB]=MyStretch(RGB)
+RGB=double(RGB);
+mi=min(RGB(:)); mx=max(RGB(:));
+RGB=(RGB-mi)/(mx-mi);
+function [fig]=MyFigure()
+fig=figure();
+function []=MyImshow(fig,jmg,fn,job)
+figure(fig); imshow(jmg); drawnow;
+function [img,jmg]=MyImResize(img,jmg)
+jmg=imresize(jmg,[img.h img.w],'bilinear');
+[img.V,img.U,img.N]=size(jmg); img.N=img.V*img.U;
